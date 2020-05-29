@@ -135,11 +135,12 @@ def find_colinear_within_el(el, nodes):
   if(el[0]==3):
     # quadrilateral
     v = el[-4:]
-    cc012 = checkCol(nodes[v[0],:],nodes[v[1],:],nodes[v[2], :])
-    cc123 = checkCol(nodes[v[1],:],nodes[v[2],:],nodes[v[3], :])
-    cc230 = checkCol(nodes[v[2],:],nodes[v[3],:],nodes[v[0], :])
-    cc301 = checkCol(nodes[v[3],:],nodes[v[0],:],nodes[v[1], :])
+    cc012 = checkCol(nodes[v[0]-1,:],nodes[v[1]-1,:],nodes[v[2]-1, :])
+    cc123 = checkCol(nodes[v[1]-1,:],nodes[v[2]-1,:],nodes[v[3]-1, :])
+    cc230 = checkCol(nodes[v[2]-1,:],nodes[v[3]-1,:],nodes[v[0]-1, :])
+    cc301 = checkCol(nodes[v[3]-1,:],nodes[v[0]-1,:],nodes[v[1]-1, :])
     #print(cc012); print(cc123); print(cc230); print(cc301)
+    #stop
     ccgrpsort = np.argsort(np.array([cc012, cc123, cc230, cc301]))
     #print(ccgrpsort)
     if(ccgrpsort[0]==0):
@@ -172,10 +173,26 @@ def find_neighbours(elid, elements, queryid):
     el_cont_v3 = np.setdiff1d(np.ndarray.flatten(np.argwhere(np.any(np.isin(elements[:,-4:], v[3]), axis=1)))+1, elid)
     #print(el_cont_v0)
     #print(el_cont_v1)
-    neigh_01 = np.intersect1d(el_cont_v0,el_cont_v1)
-    neigh_12 = np.intersect1d(el_cont_v1,el_cont_v2)
-    neigh_23 = np.intersect1d(el_cont_v2,el_cont_v3)
-    neigh_30 = np.intersect1d(el_cont_v3,el_cont_v0)
+    neigh_01 = np.intersect1d(el_cont_v0, el_cont_v1)
+    neigh_12 = np.intersect1d(el_cont_v1, el_cont_v2)
+    neigh_23 = np.intersect1d(el_cont_v2, el_cont_v3)
+    neigh_30 = np.intersect1d(el_cont_v3, el_cont_v0)
+    if(np.size(neigh_01)==0):
+      print('  No neighbour found for edge 0-1 of element '+str(elid)+'.')
+      print(el_cont_v0, el_cont_v1)
+      stop
+    if(np.size(neigh_12)==0):
+      print('  No neighbour found for edge 1-2 of element '+str(elid)+'.')
+      print(el_cont_v1, el_cont_v2)
+      stop
+    if(np.size(neigh_23)==0):
+      print('  No neighbour found for edge 2-3 of element '+str(elid)+'.')
+      print(el_cont_v2, el_cont_v3)
+      stop
+    if(np.size(neigh_30)==0):
+      print('  No neighbour found for edge 3-0 of element '+str(elid)+'.')
+      print(el_cont_v3, el_cont_v4)
+      stop
     #print(neigh_01)
     #print(neigh_12)
     #print(neigh_23)
