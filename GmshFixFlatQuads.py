@@ -7,7 +7,7 @@ import argparse
 debug_dofix = True # Debugging switch. Leave as is.
 debug_dofix__dont_add_elements = False # Debug flag, leave as is.
 
-TINYVAL = 1e-3
+threshold = 5e-3
 ngnod = 4
 xunit = np.array([-1,1,1,-1])
 zunit = np.array([-1,-1,1,1])
@@ -409,7 +409,7 @@ def compute_jacobians(elements, nodes):
       #print(el[-4:])
       #print(nodes[el[-4:]-1, :])
       min_avg_max = compute_jacobian_one_element(nodes[el[-4:]-1, :])
-      if(min_avg_max[0]<=TINYVAL):
+      if(min_avg_max[0]<=threshold):
         list_problematic.append(elid+1)
   if(verbose):
     print('problematic elements found: ', list_problematic)
