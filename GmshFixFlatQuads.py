@@ -224,7 +224,7 @@ def find_neighbours(elid, elements, queryid, nodes):
     elif(np.size(query_el)==1):
       if(verbose):
         print('  Query of elements sharing vertice with local number '+str(queryid)+' (global number '+str(v[queryid])+') has returned one element, returning it.')
-      return(neigh_01[0], neigh_12[0], neigh_23[0], neigh_30[0], query_el[0])
+      return(neigh_01[0], neigh_12[0], neigh_23[0], neigh_30[0], [query_el[0]])
     else:
       print('  Query of elements sharing vertice with local number '+str(queryid)+' (global number '+str(v[queryid])+') has returned multiple elements, don''t know what to do next.')
       error()
@@ -400,6 +400,7 @@ def fix_sick_element(nodes, elements, elid):
     nodes[save_healthy_node-1,:] = (nodes[next_remaining_col_node-1,:] + nodes[save_healthy_node-1,:])/2.
   elif(n_neighbours_at_healthy==1):
     # Five neighbours.
+    neigh_at_healthy = neigh_at_healthy[0] # convert from list to int
     # Modify the 'neigh_at_healthy' (the element sharing only the healthy vertice) such that it lies sharing neigh1 and one of the new elements.
     elements = modify_vertice(elements, neigh_at_healthy, save_healthy_node, np1id)
     emptied_neigh2_node = find_common_vertex(elements, neigh_at_healthy, neigh2)
