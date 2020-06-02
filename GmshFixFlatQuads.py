@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import sys
+from gmsh_in_out import *
 
 ################################################################
 ################################################################
@@ -8,7 +9,7 @@ import sys
 debug_dofix = True # Debugging switch. Leave as is.
 debug_dofix__dont_add_elements = False # Debug flag, leave as is.
 
-threshold = 5e-3
+jacobian_threshold = 5e-3
 ngnod = 4
 xunit = np.array([-1,1,1,-1])
 zunit = np.array([-1,-1,1,1])
@@ -26,105 +27,6 @@ def prepareArgumentParser():
 
 def error(msg='Error, stopping script.'):
   sys.exit(msg)
-
-################################################################
-
-def read_msh_file(filename):
-  if(verbose):
-    print('Loading GMSH file "'+filename+'".')
-  fid = open(filename, 'r')
-  lines = [line.rstrip('\n') for line in fid]
-  reading_nodes = False
-  read_number_of_nodes = False
-  reading_elements = False
-  read_number_of_elements = False
-  header = [];
-  for l in lines:
-    if(l=='$Nodes'):
-      reading_nodes = True
-      continue
-    if(l=='$EndNodes'):
-      reading_nodes = False
-    if(l=='$Elements'):
-      reading_elements = True
-      continue
-    if(l=='$EndElements'):
-      reading_elements = False
-    if(reading_nodes):
-      if(read_number_of_nodes):
-        # read next node
-        nodes[c, :] = np.array(l.split(' ')[1:3]).astype(np.float)
-        #print(nodes[c,:])
-        c = c+1;
-        #stop
-      else:
-        nnodes = int(l)
-        nodes = np.zeros((nnodes, 2))
-        c = 0
-        read_number_of_nodes = True
-    elif(reading_elements):
-      if(read_number_of_elements):
-        # read next element
-        curel = np.array(l.split(' ')[1:]).astype(np.int)
-        if(curel[0]==1):
-          # line, 6 items
-          elements[c, 0:6] = curel
-        elif(curel[0]==3):
-          # quadrilateral, 8 items
-          elements[c, 0:8] = curel
-        else:
-          print(curel)
-          error()
-        c = c+1;
-      else:
-        nelements = int(l)
-        elements = np.zeros((nelements, 8), dtype=int)
-        c = 0
-        read_number_of_elements = True
-    else:
-      header.append(l)
-  fid.close()
-  header.pop() # pop "$EndNodes"
-  header.pop() # pop "$EndElements"
-  if(verbose):
-    print('Finished loading GMSH file "'+filename+'".')
-  return (header, nodes, elements)
-
-################################################################
-
-def write_msh_file(filename, header, nodes, elements):
-  nnodes = np.shape(nodes)[0]
-  nelements = np.shape(elements)[0]
-  if(verbose):
-    print('Writing '+str(nnodes)+' nodes and '+str(nelements)+' elements to file "'+filename+'".')
-  fid = open(filename, 'w')
-  fid.write('\n'.join(header))
-  fid.write('\n')
-  fid.write('$Nodes\n')
-  fid.write('%d\n' % nnodes)
-  for i in range(nnodes):
-    fid.write('%d %.6f %.6f 0\n' % (i+1, nodes[i, 0], nodes[i, 1]))
-    # Note: append a "0" at the end, since we are dealing with 2D.
-  fid.write('$EndNodes\n')
-  fid.write('$Elements\n')
-  fid.write('%d\n' % nelements)
-  for i in range(nelements):
-    el = elements[i, :]
-    if(el[0]==1):
-      # line, 6 items
-      fid.write('%d %d %d %d %d %d %d\n' % (i+1, el[0], el[1], el[2], el[3], el[4], el[5]))
-    elif(el[0]==3):
-      # quadrialteral, 8 items
-      fid.write('%d %d %d %d %d %d %d %d %d\n' % (i+1, el[0], el[1], el[2], el[3], el[4], el[5], el[6], el[7]))
-    else:
-      print(el)
-      error()
-  fid.write('$EndElements\n')
-  fid.write('\n')
-  fid.close()
-  if(verbose):
-    print('Finished writing to file "'+filename+'".')
-  return(0)
 
 ################################################################
 
@@ -286,7 +188,7 @@ def compute_jacobian_one_element(coords):
   for i in range(ngnod):
     jacs[i] = compute_jacobian_one_pt(coords[:,0], coords[:,1], xunit[i], zunit[i])
   return (np.array([np.min(jacs), np.mean(jacs), np.max(jacs)]))
-
+  
 def fix_sick_element(nodes, elements, elid):
   # Main function, aimed at modifying the flat quadrilateral.
   
@@ -451,6 +353,7 @@ def compute_jacobians(elements, nodes):
   if(verbose or nelements>1000):
     print('Computing Jacobians.')
   list_problematic = [];
+  list_flipped = [];
   for elid in range(nelements):
     if(nelements>1000 and elid%int(nelements/20.)==0):
       print('  '+str(int(100*elid/nelements))+' % done.')
@@ -460,13 +363,32 @@ def compute_jacobians(elements, nodes):
       #print(el[-4:])
       #print(nodes[el[-4:]-1, :])
       min_avg_max = compute_jacobian_one_element(nodes[el[-4:]-1, :])
-      if(min_avg_max[0]<=threshold):
+      #print(elid+1, min_avg_max)
+      if(abs(min_avg_max[0])<=jacobian_threshold):
         list_problematic.append(elid+1)
+      if(np.all(min_avg_max<=jacobian_threshold)):
+        print('  Element '+str(elid+1)+' is completely flipped.')
+        list_flipped.append(elid+1)
   if(verbose):
     print('problematic elements found: ', list_problematic)
     print('Finished computing Jacobians.')
-  return (list_problematic)
+  return (list_flipped, list_problematic)
 
+def fix_flipped_element(elements, elid):
+  # Side function, aimed at flipping elements which are completely flipped.
+  el = elements[elid-1, :]
+  print('  Flipping flipped element '+str(elid)+'.')
+  if(verbose):
+    print(el)
+  v = el[-4:]
+  #print(v)
+  v = np.flip(v)
+  #print(v)
+  #print(elements[elid-1,-4:])
+  elements[elid-1,-4:] = v
+  #print(elements[elid-1,-4:])
+  return(elements)
+  
 ################################################################
 ################################################################
 
@@ -478,7 +400,7 @@ filename_inp = args.input
 filename_out = args.output
 verbose = args.verbose
 
-(header, nodes, elements) = read_msh_file(filename_inp)
+(header, nodes, elements) = read_msh_file(filename_inp, verbose)
 if(verbose):
   print(' ')
   print('Loaded nodes: ', np.shape(nodes))
@@ -487,10 +409,17 @@ if(verbose):
 
 if(debug_dofix):
   # Compute Jacobians and store element IDs having Jacobian<=0.
-  list_problematic = compute_jacobians(elements, nodes)
+  (list_flipped, list_problematic) = compute_jacobians(elements, nodes)
   
   if(verbose):
     print(' ')
+  
+  if(len(list_flipped)>0):
+    # Flip back flipped elements.
+    for elid in list_flipped:
+      (elements) = fix_flipped_element(elements, elid)
+    # Recompute jacobians.
+    (list_flipped, list_problematic) = compute_jacobians(elements, nodes)
   
   # Treat problematic elements.
   for elid in list_problematic:
@@ -500,4 +429,6 @@ if(debug_dofix):
     print(' ')
 
 # Re-generate .msh file as output.
-write_msh_file(filename_out, header, nodes, elements)
+write_msh_file(filename_out, header, nodes, elements, verbose)
+
+
