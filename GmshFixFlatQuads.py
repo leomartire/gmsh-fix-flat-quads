@@ -451,10 +451,8 @@ def compute_jacobians(elements, nodes):
     print('Computing Jacobians.')
   list_problematic = [];
   for elid in range(nelements):
-    if(nelements>1000):
-      pct = int(100*elid/nelements)
-      if((pct%5)==0):
-        print('  '+str(pct)+' % done.')
+    if(nelements>1000 and elid%int(nelements/20.)==0):
+      print('  '+str(int(100*elid/nelements))+' % done.')
     el = elements[elid, :]
     if(el[0]==3):
       # compute only for quads
