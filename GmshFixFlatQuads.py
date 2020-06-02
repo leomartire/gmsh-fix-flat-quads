@@ -257,13 +257,14 @@ def fix_sick_element(nodes, elements, elid):
   save_healthy_node = vertices[healthyid]
   elements = modify_vertice(elements, elid, save_healthy_node, np1id)
   
-  # Check whether new elements are to be added to left or right, and thus whether we should flip the numbering
-  if(np1[0] > nodes[save_healthy_node-1, 0]):
-    # added to right, no need to flip
-    flip_new_elements = False
-  else:
-    # added to left, need to flip
-    flip_new_elements = True
+  ## Check whether new elements are to be added to left or right, and thus whether we should flip the numbering
+  #if(np1[0]>nodes[save_healthy_node-1, 0] or np1[1]>nodes[save_healthy_node-1, 1]):
+  #  # added to right, no need to flip
+  #  flip_new_elements = False
+  #else:
+  #  # added to left, need to flip
+  #  flip_new_elements = True
+  flip_new_elements = False
   
   # Compute distance between neighbour 1 (towards which we'll move the sick element)
   # and the sick colinear points (among which we need to choose one to leave behind, i.e. the furthest)
@@ -409,21 +410,21 @@ if(verbose):
 
 if(debug_dofix):
   # Compute Jacobians and store element IDs having Jacobian<=0.
-  (list_flipped, list_problematic) = compute_jacobians(elements, nodes)
+  (__, list_problematic) = compute_jacobians(elements, nodes)
   
   if(verbose):
     print(' ')
   
+  # Treat problematic elements.
+  for elid in list_problematic:
+    (nodes, elements) = fix_sick_element(nodes, elements, elid)
+  
+  # Compute Jacobian and flip all flipped elements.
+  (list_flipped, __) = compute_jacobians(elements, nodes)
   if(len(list_flipped)>0):
     # Flip back flipped elements.
     for elid in list_flipped:
       (elements) = fix_flipped_element(elements, elid)
-    # Recompute jacobians.
-    (list_flipped, list_problematic) = compute_jacobians(elements, nodes)
-  
-  # Treat problematic elements.
-  for elid in list_problematic:
-    (nodes, elements) = fix_sick_element(nodes, elements, elid)
   
   if(verbose):
     print(' ')
