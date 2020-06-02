@@ -1,5 +1,6 @@
-import numpy as np
 import argparse
+import numpy as np
+import sys
 
 ################################################################
 ################################################################
@@ -22,6 +23,9 @@ def prepareArgumentParser():
   required.add_argument("-o", "--output", type=str, help=".msh file output", required=True)
   parser.add_argument("-v", "--verbose", type=int, default=0, help="Activate verbosity.", choices=[0, 1])
   return(parser)
+
+def error(msg='Error, stopping script.'):
+  sys.exit(msg)
 
 ################################################################
 
@@ -70,7 +74,7 @@ def read_msh_file(filename):
           elements[c, 0:8] = curel
         else:
           print(curel)
-          error
+          error()
         c = c+1;
       else:
         nelements = int(l)
@@ -114,7 +118,7 @@ def write_msh_file(filename, header, nodes, elements):
       fid.write('%d %d %d %d %d %d %d %d %d\n' % (i+1, el[0], el[1], el[2], el[3], el[4], el[5], el[6], el[7]))
     else:
       print(el)
-      error
+      error()
   fid.write('$EndElements\n')
   fid.write('\n')
   fid.close()
@@ -158,9 +162,9 @@ def find_colinear_within_el(el, nodes):
     return(healthyid[0], colids, v, nodes[v-1, :])
   else:
     print(el)
-    error
+    error()
 
-def find_neighbours(elid, elements, queryid):
+def find_neighbours(elid, elements, queryid, nodes):
   # Find neighbours of a given element.
   el = elements[elid-1, :]
   if(el[0]==3):
@@ -208,11 +212,26 @@ def find_neighbours(elid, elements, queryid):
       query_el = np.setdiff1d(el_cont_v3, np.array([neigh_23, neigh_30]))
     else:
       queryid
-      error
-    return(neigh_01[0], neigh_12[0], neigh_23[0], neigh_30[0], query_el[0])
+      error()
+    #print(neigh_01, neigh_12, neigh_23, neigh_30, query_el)
+    if(np.size(query_el)==0):
+      if(verbose):
+        print('  Query of elements sharing vertice with local number '+str(queryid)+' (global number '+str(v[queryid])+') has returned nothing. Element has only four neighbours. Returning empty list.')
+      #baryc = bary(elid, elements, nodes)
+      #print('  Check element %d at roughly (x,z)=(%f, %f), with neighbours %d %d %d %d.' % (elid, baryc[0], baryc[1], neigh_01[0], neigh_12[0], neigh_23[0], neigh_30[0]))
+      #error()
+      return(neigh_01[0], neigh_12[0], neigh_23[0], neigh_30[0], [])
+    elif(np.size(query_el)==1):
+      if(verbose):
+        print('  Query of elements sharing vertice with local number '+str(queryid)+' (global number '+str(v[queryid])+') has returned one element, returning it.')
+      return(neigh_01[0], neigh_12[0], neigh_23[0], neigh_30[0], query_el[0])
+    else:
+      print('  Query of elements sharing vertice with local number '+str(queryid)+' (global number '+str(v[queryid])+') has returned multiple elements, don''t know what to do next.')
+      error()
+      #return(neigh_01[0], neigh_12[0], neigh_23[0], neigh_30[0], query_el[0])
   else:
     print(el)
-    error
+    error()
 
 def bary(elid, elements, nodes):
   # Compute barycentre of a given element.
@@ -249,9 +268,9 @@ def compute_jacobian_one_pt(xquad, zquad, s, t):
   dershape2D[1, 3] = - QUARTER * sm
   # sum of derivatives of shape functions should be zero
   if (np.abs(np.sum(dershape2D[0,:])) > 0.):
-    print('Error deriv xi shape functions'); error
+    print('Error deriv xi shape functions'); error()
   if (abs(sum(dershape2D[1,:])) > 0.):
-    print('Error deriv gamma shape functions'); error
+    print('Error deriv gamma shape functions'); error()
   xxi = 0.; zxi = 0.; xgamma = 0.; zgamma = 0.
   for ia in range(ngnod):
     xelm = xquad[ia]
@@ -283,10 +302,11 @@ def fix_sick_element(nodes, elements, elid):
     print('-----------------')
 
   # Grab neighbouring elements.
-  (neigh_01, neigh_12, neigh_23, neigh_30, neigh_at_healthy) = find_neighbours(elid, elements, healthyid)
+  (neigh_01, neigh_12, neigh_23, neigh_30, neigh_at_healthy) = find_neighbours(elid, elements, healthyid, nodes)
   if(verbose):
     print('neighbours: ', neigh_01, neigh_12, neigh_23, neigh_30, neigh_at_healthy)
     print('-----------------')
+  n_neighbours_at_healthy = len(neigh_at_healthy)
 
   # Select the two SIDE elements to be modified.
   # Those are the neighbours on the remaining two sides, opposed to the flat sides.
@@ -303,7 +323,7 @@ def fix_sick_element(nodes, elements, elid):
     neigh1 = neigh_23
     neigh2 = neigh_30
   else:
-    error
+    error()
   if(verbose):
     print('side neighbours: ', neigh1, neigh2)
     print('-----------------')
@@ -369,19 +389,32 @@ def fix_sick_element(nodes, elements, elid):
     print('----------------- finished modifying sick element')
   
   # Modify element at healthy point.
-  elements = modify_vertice(elements, neigh_at_healthy, save_healthy_node, np1id)
-  #print(elements[neigh_at_healthy-1, -4:])
-  #print(elements[neigh2-1, -4:])
-  emptied_neigh2_node = find_common_vertex(elements, neigh_at_healthy, neigh2)
-  elements = modify_vertice(elements, neigh_at_healthy, emptied_neigh2_node, save_healthy_node)
+  if(n_neighbours_at_healthy==0):
+    # Only four neighbours, do not modify side neighbours, we only need to create two new elements.
+    newnodes1 = [save_healthy_node, next_remaining_col_node, emptied_col_node, np2id]
+    shared_neigh1_neigh2 = find_common_vertex(elements, neigh1, neigh2)
+    newnodes2 = [save_healthy_node, np2id, shared_neigh1_neigh2, np1id];
+    # Modify slightly the healthy node, such that the new element no. 2 is not too flat, by sliding it slightly towards the aligned points.
+    #print(next_remaining_col_node, save_healthy_node, shared_neigh1_neigh2)
+    #print(nodes[next_remaining_col_node-1,:], nodes[save_healthy_node-1,:], nodes[shared_neigh1_neigh2-1,:])
+    nodes[save_healthy_node-1,:] = (nodes[next_remaining_col_node-1,:] + nodes[save_healthy_node-1,:])/2.
+  elif(n_neighbours_at_healthy==1):
+    # Five neighbours.
+    # Modify the 'neigh_at_healthy' (the element sharing only the healthy vertice) such that it lies sharing neigh1 and one of the new elements.
+    elements = modify_vertice(elements, neigh_at_healthy, save_healthy_node, np1id)
+    emptied_neigh2_node = find_common_vertex(elements, neigh_at_healthy, neigh2)
+    elements = modify_vertice(elements, neigh_at_healthy, emptied_neigh2_node, save_healthy_node)
+    # Get the last unmodified node from 'neigh_at_healthy', and name it neigh_at_healthy_remaining_node. It will be a node of the new element.
+    neigh_at_healthy_remaining_node = np.setdiff1d(elements[neigh_at_healthy-1, -4:], np.append(find_common_vertex(elements, neigh_at_healthy, neigh1), save_healthy_node))[0]
+    newnodes1 = [save_healthy_node, next_remaining_col_node, emptied_col_node, np2id]
+    newnodes2 = [save_healthy_node, np2id, emptied_neigh2_node, neigh_at_healthy_remaining_node];
+  else:
+    error('Don''t know what to do.')
   if(verbose):
     print('----------------- finished modifying summit neighbour')
 
   # Create new elements.
   if(not(debug_dofix__dont_add_elements)):
-    neigh_at_healthy_remaining_node = np.setdiff1d(elements[neigh_at_healthy-1, -4:], np.append(find_common_vertex(elements, neigh_at_healthy, neigh1), save_healthy_node))[0]
-    newnodes1 = [save_healthy_node, next_remaining_col_node, emptied_col_node, np2id]
-    newnodes2 = [save_healthy_node, np2id, emptied_neigh2_node, neigh_at_healthy_remaining_node];
     if(flip_new_elements):
       # if new elements added on the "right", flip them to keep numbering in nice order
       newnodes1 = np.flip(newnodes1)
@@ -418,8 +451,10 @@ def compute_jacobians(elements, nodes):
     print('Computing Jacobians.')
   list_problematic = [];
   for elid in range(nelements):
-    if(nelements>1000 and elid%int(nelements/20)==0):
-      print('  '+str(int(100*elid/nelements))+' % done')
+    if(nelements>1000):
+      pct = int(100*elid/nelements)
+      if((pct%5)==0):
+        print('  '+str(pct)+' % done.')
     el = elements[elid, :]
     if(el[0]==3):
       # compute only for quads
