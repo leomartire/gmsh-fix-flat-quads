@@ -264,7 +264,7 @@ def fix_sick_element(nodes, elements, elid):
   #else:
   #  # added to left, need to flip
   #  flip_new_elements = True
-  flip_new_elements = False
+  #flip_new_elements = False
   
   # Compute distance between neighbour 1 (towards which we'll move the sick element)
   # and the sick colinear points (among which we need to choose one to leave behind, i.e. the furthest)
@@ -319,10 +319,10 @@ def fix_sick_element(nodes, elements, elid):
 
   # Create new elements.
   if(not(debug_dofix__dont_add_elements)):
-    if(flip_new_elements):
-      # if new elements added on the "right", flip them to keep numbering in nice order
-      newnodes1 = np.flip(newnodes1)
-      newnodes2 = np.flip(newnodes2)
+    #if(flip_new_elements):
+    #  # if new elements added on the "right", flip them to keep numbering in nice order
+    #  newnodes1 = np.flip(newnodes1)
+    #  newnodes2 = np.flip(newnodes2)
     model = elements[elid-1,:];
     ne1 = np.copy(model)
     ne1[-4:] = newnodes1
