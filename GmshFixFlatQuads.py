@@ -9,6 +9,10 @@ from gmsh_in_out import *
 debug_dofix = True # Debugging switch. Leave as is.
 debug_dofix__dont_add_elements = False # Debug flag, leave as is.
 
+# Activating this switch normalises all Jacobian by the size of the element, allowing discrimination by an absolute threshold.
+normalise_jacobian = True
+jacobian_threshold_absolute = 2.
+
 jacobian_threshold = 5e-3
 ngnod = 4
 xunit = np.array([-1,1,1,-1])
@@ -187,7 +191,18 @@ def compute_jacobian_one_element(coords):
   jacs = np.zeros(ngnod)
   for i in range(ngnod):
     jacs[i] = compute_jacobian_one_pt(coords[:,0], coords[:,1], xunit[i], zunit[i])
-  return (np.array([np.min(jacs), np.mean(jacs), np.max(jacs)]))
+  res = np.array([np.min(jacs), np.mean(jacs), np.max(jacs)])
+  if(normalise_jacobian):
+    #print(coords)
+    # Compute two diagonals, normalize by largest one.
+    diag1 = np.sqrt(np.power(coords[0,0]-coords[2,0], 2)+np.power(coords[0,1]-coords[2,1], 2))
+    diag2 = np.sqrt(np.power(coords[1,0]-coords[3,0], 2)+np.power(coords[1,1]-coords[3,1], 2))
+    #print(diag1, diag2)
+    #print(res)
+    res = res / np.max([diag1, diag2])
+    #print(res)
+    #stop
+  return (res)
   
 def fix_sick_element(nodes, elements, elid):
   # Main function, aimed at modifying the flat quadrilateral.
@@ -364,9 +379,14 @@ def compute_jacobians(elements, nodes):
       #print(el[-4:])
       #print(nodes[el[-4:]-1, :])
       min_avg_max = compute_jacobian_one_element(nodes[el[-4:]-1, :])
-      #print(elid+1, min_avg_max)
-      if(abs(min_avg_max[0])<=jacobian_threshold):
-        list_problematic.append(elid+1)
+      if(verbose):
+        print('Element '+str(elid+1)+' has Jac_min = '+str(min_avg_max)+'.')
+      if(normalise_jacobian):
+        if(abs(min_avg_max[0])<=jacobian_threshold_absolute):
+          list_problematic.append(elid+1)
+      else:
+        if(abs(min_avg_max[0])<=jacobian_threshold):
+          list_problematic.append(elid+1)
       if(np.all(min_avg_max<=jacobian_threshold)):
         print('  Element '+str(elid+1)+' is completely flipped.')
         list_flipped.append(elid+1)
